@@ -154,7 +154,7 @@ class Neo4jBoltService {
             name: ns.name,
             status: ns.status,
             creationTime: ns.creationTime,
-            labels: ns.labels || {},
+            labels: JSON.stringify(ns.labels || {}),
             type: 'Namespace'
           }
         });
@@ -173,7 +173,8 @@ class Neo4jBoltService {
             nodeName: pod.nodeName,
             serviceAccount: pod.serviceAccount,
             creationTime: pod.creationTime,
-            labels: pod.labels || {},
+            labels: JSON.stringify(pod.labels || {}),
+            containers: JSON.stringify(pod.containers || []),
             type: 'Pod'
           }
         });
@@ -188,11 +189,11 @@ class Neo4jBoltService {
             namespace: svc.namespace,
             type: svc.type,
             clusterIP: svc.clusterIP,
-            externalIPs: svc.externalIPs,
-            ports: svc.ports,
-            selector: svc.selector,
+            externalIPs: JSON.stringify(svc.externalIPs || []),
+            ports: JSON.stringify(svc.ports || []),
+            selector: JSON.stringify(svc.selector || {}),
             creationTime: svc.creationTime,
-            labels: svc.labels || {},
+            labels: JSON.stringify(svc.labels || {}),
             nodeType: 'Service'
           }
         });
@@ -207,9 +208,10 @@ class Neo4jBoltService {
             namespace: dep.namespace,
             replicas: dep.replicas,
             readyReplicas: dep.readyReplicas,
-            selector: dep.selector,
+            selector: JSON.stringify(dep.selector || {}),
+            template: JSON.stringify(dep.template || {}),
             creationTime: dep.creationTime,
-            labels: dep.labels || {},
+            labels: JSON.stringify(dep.labels || {}),
             nodeType: 'Deployment'
           }
         });
@@ -222,11 +224,11 @@ class Neo4jBoltService {
           properties: {
             name: ing.name,
             namespace: ing.namespace,
-            rules: ing.rules,
-            tls: ing.tls,
-            annotations: ing.annotations,
+            rules: JSON.stringify(ing.rules || []),
+            tls: JSON.stringify(ing.tls || []),
+            annotations: JSON.stringify(ing.annotations || {}),
             creationTime: ing.creationTime,
-            labels: ing.labels || {},
+            labels: JSON.stringify(ing.labels || {}),
             nodeType: 'Ingress'
           }
         });
@@ -239,9 +241,9 @@ class Neo4jBoltService {
           properties: {
             name: sa.name,
             namespace: sa.namespace,
-            secrets: sa.secrets,
+            secrets: JSON.stringify(sa.secrets || []),
             creationTime: sa.creationTime,
-            labels: sa.labels || {},
+            labels: JSON.stringify(sa.labels || {}),
             nodeType: 'ServiceAccount'
           }
         });
@@ -254,9 +256,9 @@ class Neo4jBoltService {
           properties: {
             name: role.name,
             namespace: role.namespace,
-            rules: role.rules,
+            rules: JSON.stringify(role.rules || []),
             creationTime: role.creationTime,
-            labels: role.labels || {},
+            labels: JSON.stringify(role.labels || {}),
             nodeType: 'Role'
           }
         });
@@ -268,9 +270,9 @@ class Neo4jBoltService {
           label: 'ClusterRole',
           properties: {
             name: cr.name,
-            rules: cr.rules,
+            rules: JSON.stringify(cr.rules || []),
             creationTime: cr.creationTime,
-            labels: cr.labels || {},
+            labels: JSON.stringify(cr.labels || {}),
             nodeType: 'ClusterRole'
           }
         });
