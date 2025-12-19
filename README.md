@@ -39,8 +39,8 @@
 
 1. **克隆项目**
    ```bash
-   git clone <repository-url>
-   cd cloud-native-graph-platform
+   git clone https://github.com/YH-JY/neo4j-test.git
+   cd neo4j-test
    ```
 
 2. **启动Neo4j数据库**
