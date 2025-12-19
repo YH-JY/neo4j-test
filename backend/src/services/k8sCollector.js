@@ -15,22 +15,45 @@ class K8sAssetCollector {
 
   loadConfig() {
     try {
-      // Try to load in-cluster config first
+      // First try to load from config file (for Windows development)
+      const configPath = process.env.K8S_CONFIG_PATH;
+      if (configPath && require('fs').existsSync(configPath)) {
+        this.kubeConfig.loadFromFile(configPath);
+        logger.info(`Loaded Kubernetes config from file: ${configPath}`);
+        return;
+      }
+      
+      // Try default kubeconfig path
+      const defaultPath = `${process.env.USERPROFILE || process.env.HOME}/.kube/config`;
+      if (require('fs').existsSync(defaultPath)) {
+        this.kubeConfig.loadFromFile(defaultPath);
+        logger.info('Loaded Kubernetes config from default path');
+        return;
+      }
+      
+      // Last resort: try in-cluster config
       this.kubeConfig.loadFromCluster();
       logger.info('Loaded in-cluster Kubernetes config');
     } catch (error) {
-      try {
-        // Fallback to kubeconfig file
-        this.kubeConfig.loadFromFile(process.env.K8S_CONFIG_PATH || `${process.env.HOME}/.kube/config`);
-        logger.info('Loaded Kubernetes config from file');
-      } catch (error) {
-        logger.error('Failed to load Kubernetes config:', error);
-        throw new Error('Could not load Kubernetes configuration');
-      }
+      logger.error('Failed to load Kubernetes configuration:', error.message);
+      
+      // For development, create a mock data mode
+      logger.warn('Running in demo mode with mock data');
+      this.demoMode = true;
     }
   }
 
   async collectNamespaces() {
+    if (this.demoMode) {
+      logger.info('Using mock namespaces data');
+      return [
+        { name: 'default', status: 'Active', creationTime: '2024-01-01T00:00:00Z', labels: {}, annotations: {} },
+        { name: 'kube-system', status: 'Active', creationTime: '2024-01-01T00:00:00Z', labels: {}, annotations: {} },
+        { name: 'kube-public', status: 'Active', creationTime: '2024-01-01T00:00:00Z', labels: {}, annotations: {} },
+        { name: 'monitoring', status: 'Active', creationTime: '2024-01-01T00:00:00Z', labels: {}, annotations: {} }
+      ];
+    }
+    
     try {
       const res = await this.coreV1Api.listNamespace();
       return res.body.items.map(ns => ({
@@ -47,6 +70,15 @@ class K8sAssetCollector {
   }
 
   async collectPods(namespace = null) {
+    if (this.demoMode) {
+      logger.info('Using mock pods data');
+      return [
+        { name: 'nginx-deployment-12345', namespace: 'default', status: 'Running', podIP: '10.244.0.10', hostIP: '192.168.40.129', nodeName: 'k8s-node-1', serviceAccount: 'default', creationTime: '2024-01-01T00:00:00Z', labels: { app: 'nginx' }, containers: [{ name: 'nginx', image: 'nginx:1.21', ports: [{ containerPort: 80 }] }] },
+        { name: 'redis-pod-67890', namespace: 'default', status: 'Running', podIP: '10.244.0.11', hostIP: '192.168.40.129', nodeName: 'k8s-node-1', serviceAccount: 'default', creationTime: '2024-01-01T00:00:00Z', labels: { app: 'redis' }, containers: [{ name: 'redis', image: 'redis:6.2', ports: [{ containerPort: 6379 }] }] },
+        { name: 'postgres-54321', namespace: 'monitoring', status: 'Running', podIP: '10.244.0.12', hostIP: '192.168.40.129', nodeName: 'k8s-node-2', serviceAccount: 'postgres-sa', creationTime: '2024-01-01T00:00:00Z', labels: { app: 'postgres' }, containers: [{ name: 'postgres', image: 'postgres:13', ports: [{ containerPort: 5432 }] }] }
+      ];
+    }
+    
     try {
       const res = namespace 
         ? await this.coreV1Api.listNamespacedPod(namespace)
@@ -77,6 +109,15 @@ class K8sAssetCollector {
   }
 
   async collectServices(namespace = null) {
+    if (this.demoMode) {
+      logger.info('Using mock services data');
+      return [
+        { name: 'nginx-service', namespace: 'default', type: 'ClusterIP', clusterIP: '10.96.0.100', externalIPs: [], ports: [{ port: 80, targetPort: 80 }], selector: { app: 'nginx' }, creationTime: '2024-01-01T00:00:00Z', labels: {} },
+        { name: 'redis-service', namespace: 'default', type: 'ClusterIP', clusterIP: '10.96.0.101', externalIPs: [], ports: [{ port: 6379, targetPort: 6379 }], selector: { app: 'redis' }, creationTime: '2024-01-01T00:00:00Z', labels: {} },
+        { name: 'postgres-service', namespace: 'monitoring', type: 'ClusterIP', clusterIP: '10.96.0.102', externalIPs: [], ports: [{ port: 5432, targetPort: 5432 }], selector: { app: 'postgres' }, creationTime: '2024-01-01T00:00:00Z', labels: {} }
+      ];
+    }
+    
     try {
       const res = namespace 
         ? await this.coreV1Api.listNamespacedService(namespace)
@@ -100,6 +141,15 @@ class K8sAssetCollector {
   }
 
   async collectDeployments(namespace = null) {
+    if (this.demoMode) {
+      logger.info('Using mock deployments data');
+      return [
+        { name: 'nginx-deployment', namespace: 'default', replicas: 3, readyReplicas: 3, selector: { app: 'nginx' }, template: { labels: { app: 'nginx' } }, creationTime: '2024-01-01T00:00:00Z', labels: {} },
+        { name: 'redis-deployment', namespace: 'default', replicas: 1, readyReplicas: 1, selector: { app: 'redis' }, template: { labels: { app: 'redis' } }, creationTime: '2024-01-01T00:00:00Z', labels: {} },
+        { name: 'postgres-deployment', namespace: 'monitoring', replicas: 1, readyReplicas: 1, selector: { app: 'postgres' }, template: { labels: { app: 'postgres' } }, creationTime: '2024-01-01T00:00:00Z', labels: {} }
+      ];
+    }
+    
     try {
       const res = namespace 
         ? await this.appsV1Api.listNamespacedDeployment(namespace)
@@ -217,7 +267,8 @@ class K8sAssetCollector {
       serviceAccounts: await this.collectServiceAccounts()
     };
     
-    logger.info(`Collected ${Object.values(assets).reduce((acc, val) => acc + val.length, 0)} total assets`);
+    const totalCount = Object.values(assets).reduce((acc, val) => acc + val.length, 0);
+    logger.info(`Collected ${totalCount} total assets${this.demoMode ? ' (mock data)' : ''}`);
     return assets;
   }
 
