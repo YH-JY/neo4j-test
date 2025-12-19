@@ -10,6 +10,34 @@ class Neo4jBoltService {
     this.connect();
   }
 
+  // Helper function to recursively convert all non-primitive values to strings
+  sanitizeProperties(obj) {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.sanitizeProperties(item));
+    }
+    
+    if (typeof obj === 'object') {
+      // Convert to JSON string to preserve all nested data
+      return JSON.stringify(obj);
+    }
+    
+    // Primitive types (string, number, boolean) are returned as-is
+    return obj;
+  }
+
+  // Function to sanitize all properties of an object
+  sanitizeNodeProperties(properties) {
+    const sanitized = {};
+    for (const [key, value] of Object.entries(properties)) {
+      sanitized[key] = this.sanitizeProperties(value);
+    }
+    return sanitized;
+  }
+
   connect() {
     try {
       this.driver = neo4j.driver(
@@ -150,13 +178,13 @@ class Neo4jBoltService {
       assets.namespaces.forEach(ns => {
         allNodes.push({
           label: 'Namespace',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: ns.name,
             status: ns.status,
             creationTime: ns.creationTime,
-            labels: JSON.stringify(ns.labels || {}),
+            labels: ns.labels || {},
             type: 'Namespace'
-          }
+          })
         });
       });
       
@@ -164,7 +192,7 @@ class Neo4jBoltService {
       assets.pods.forEach(pod => {
         allNodes.push({
           label: 'Pod',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: pod.name,
             namespace: pod.namespace,
             status: pod.status,
@@ -173,10 +201,10 @@ class Neo4jBoltService {
             nodeName: pod.nodeName,
             serviceAccount: pod.serviceAccount,
             creationTime: pod.creationTime,
-            labels: JSON.stringify(pod.labels || {}),
-            containers: JSON.stringify(pod.containers || []),
+            labels: pod.labels || {},
+            containers: pod.containers || [],
             type: 'Pod'
-          }
+          })
         });
       });
       
@@ -184,18 +212,18 @@ class Neo4jBoltService {
       assets.services.forEach(svc => {
         allNodes.push({
           label: 'Service',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: svc.name,
             namespace: svc.namespace,
             type: svc.type,
             clusterIP: svc.clusterIP,
-            externalIPs: JSON.stringify(svc.externalIPs || []),
-            ports: JSON.stringify(svc.ports || []),
-            selector: JSON.stringify(svc.selector || {}),
+            externalIPs: svc.externalIPs || [],
+            ports: svc.ports || [],
+            selector: svc.selector || {},
             creationTime: svc.creationTime,
-            labels: JSON.stringify(svc.labels || {}),
+            labels: svc.labels || {},
             nodeType: 'Service'
-          }
+          })
         });
       });
       
@@ -203,17 +231,17 @@ class Neo4jBoltService {
       assets.deployments.forEach(dep => {
         allNodes.push({
           label: 'Deployment',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: dep.name,
             namespace: dep.namespace,
             replicas: dep.replicas,
             readyReplicas: dep.readyReplicas,
-            selector: JSON.stringify(dep.selector || {}),
-            template: JSON.stringify(dep.template || {}),
+            selector: dep.selector || {},
+            template: dep.template || {},
             creationTime: dep.creationTime,
-            labels: JSON.stringify(dep.labels || {}),
+            labels: dep.labels || {},
             nodeType: 'Deployment'
-          }
+          })
         });
       });
       
@@ -221,16 +249,16 @@ class Neo4jBoltService {
       assets.ingresses.forEach(ing => {
         allNodes.push({
           label: 'Ingress',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: ing.name,
             namespace: ing.namespace,
-            rules: JSON.stringify(ing.rules || []),
-            tls: JSON.stringify(ing.tls || []),
-            annotations: JSON.stringify(ing.annotations || {}),
+            rules: ing.rules || [],
+            tls: ing.tls || [],
+            annotations: ing.annotations || {},
             creationTime: ing.creationTime,
-            labels: JSON.stringify(ing.labels || {}),
+            labels: ing.labels || {},
             nodeType: 'Ingress'
-          }
+          })
         });
       });
       
@@ -238,14 +266,14 @@ class Neo4jBoltService {
       assets.serviceAccounts.forEach(sa => {
         allNodes.push({
           label: 'ServiceAccount',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: sa.name,
             namespace: sa.namespace,
-            secrets: JSON.stringify(sa.secrets || []),
+            secrets: sa.secrets || [],
             creationTime: sa.creationTime,
-            labels: JSON.stringify(sa.labels || {}),
+            labels: sa.labels || {},
             nodeType: 'ServiceAccount'
-          }
+          })
         });
       });
       
@@ -253,14 +281,14 @@ class Neo4jBoltService {
       assets.roles.forEach(role => {
         allNodes.push({
           label: 'Role',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: role.name,
             namespace: role.namespace,
-            rules: JSON.stringify(role.rules || []),
+            rules: role.rules || [],
             creationTime: role.creationTime,
-            labels: JSON.stringify(role.labels || {}),
+            labels: role.labels || {},
             nodeType: 'Role'
-          }
+          })
         });
       });
       
@@ -268,13 +296,13 @@ class Neo4jBoltService {
       assets.clusterRoles.forEach(cr => {
         allNodes.push({
           label: 'ClusterRole',
-          properties: {
+          properties: this.sanitizeNodeProperties({
             name: cr.name,
-            rules: JSON.stringify(cr.rules || []),
+            rules: cr.rules || [],
             creationTime: cr.creationTime,
-            labels: JSON.stringify(cr.labels || {}),
+            labels: cr.labels || {},
             nodeType: 'ClusterRole'
-          }
+          })
         });
       });
       
