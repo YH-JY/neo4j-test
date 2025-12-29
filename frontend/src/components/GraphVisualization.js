@@ -194,25 +194,36 @@ const GraphVisualization = () => {
         
         const nodesDataset = new DataSet(
           graphData.nodes.map(node => ({
-            id: node.id,
+            id: parseInt(node.id),
             label: node.label,
             color: getNodeColor(node.type),
-            title: `${node.type}: ${node.label}\n${JSON.stringify(node.properties, null, 2)}`
+            title: `${node.type}: ${node.label}\n${JSON.stringify(node.properties, null, 2)}`,
+            properties: node.properties,
+            labels: [node.type]
           }))
         );
         
         const edgesDataset = new DataSet(
           graphData.edges.map(edge => ({
-            id: edge.id,
-            from: edge.from,
-            to: edge.to,
+            id: parseInt(edge.id),
+            from: parseInt(edge.from),
+            to: parseInt(edge.to),
             label: edge.label,
             arrows: 'to'
           }))
         );
         
-        setNodes(graphData.nodes);
-        setEdges(graphData.edges);
+        setNodes(graphData.nodes.map(node => ({
+          ...node,
+          id: parseInt(node.id),
+          labels: [node.type]
+        })));
+        setEdges(graphData.edges.map(edge => ({
+          ...edge,
+          id: parseInt(edge.id),
+          from: parseInt(edge.from),
+          to: parseInt(edge.to)
+        })));
         
         if (network) {
           network.setData({ nodes: nodesDataset, edges: edgesDataset });
@@ -220,7 +231,7 @@ const GraphVisualization = () => {
       }
     } catch (error) {
       console.error('Error fetching graph data:', error);
-      toast.error('Failed to fetch graph data');
+      toast.error('获取图谱数据失败，请检查后端服务是否正常运行');
     } finally {
       setLoading(false);
     }
@@ -310,10 +321,12 @@ const GraphVisualization = () => {
     const connectedEdges = new Set();
     
     edges.forEach(edge => {
-      if (edge.from === nodeId || edge.to === nodeId) {
-        connectedEdges.add(edge.id);
-        connectedNodes.add(edge.from);
-        connectedNodes.add(edge.to);
+      const fromId = edge.from?.low || edge.from;
+      const toId = edge.to?.low || edge.to;
+      if (fromId === nodeId || toId === nodeId) {
+        connectedEdges.add(edge.id || edge.identity?.low);
+        connectedNodes.add(fromId);
+        connectedNodes.add(toId);
       }
     });
 
@@ -323,19 +336,27 @@ const GraphVisualization = () => {
       borderWidth: node.id === nodeId ? 5 : (connectedNodes.has(node.id) ? 3 : 1)
     }));
 
-    const edgeUpdates = edges.map(edge => ({
-      id: edge.id,
-      opacity: connectedEdges.has(edge.id) ? 1 : 0.1,
-      width: connectedEdges.has(edge.id) ? 4 : 1
-    }));
+    const edgeUpdates = edges.map(edge => {
+      const edgeId = edge.id || edge.identity?.low;
+      return {
+        id: edgeId,
+        opacity: connectedEdges.has(edgeId) ? 1 : 0.1,
+        width: connectedEdges.has(edgeId) ? 4 : 1
+      };
+    });
 
-    network.body.data.nodes.update(nodeUpdates);
-    network.body.data.edges.update(edgeUpdates);
+    if (network.body && network.body.data) {
+      network.body.data.nodes.update(nodeUpdates);
+      network.body.data.edges.update(edgeUpdates);
+    }
   };
 
   const showNodeContextMenu = (nodeId, position) => {
     const node = nodes.find(n => n.id === nodeId);
-    if (!node) return;
+    if (!node) {
+      toast.error('节点不存在');
+      return;
+    }
 
     toast.info(
       <div style={{ minWidth: '250px' }}>
@@ -354,50 +375,55 @@ const GraphVisualization = () => {
       </div>,
       {
         position: toast.POSITION.TOP_RIGHT,
-        autoClose: false,
-        closeOnClick: false
+        autoClose: 5000,
+        closeButton: true,
+        closeOnClick: true
       }
     );
   };
 
   const isolateNode = (nodeId) => {
-    const isolatedNodes = [nodeId];
-    const isolatedEdges = [];
-    
-    edges.forEach(edge => {
-      if (edge.from === nodeId || edge.to === nodeId) {
-        isolatedEdges.push(edge.id);
-      }
-    });
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) {
+      toast.error('节点不存在');
+      return;
+    }
 
-    const nodesDataset = new DataSet(
-      isolatedNodes.map(nodeId => {
-        const node = nodes.find(n => n.id === nodeId);
-        return {
-          id: nodeId,
-          label: node.label,
-          color: getNodeColor(node.type),
-          title: `${node.type}: ${node.label} (已隔离)`
-        };
-      })
-    );
+    const isolatedEdges = edges.filter(edge => {
+      const fromId = edge.from?.low || edge.from;
+      const toId = edge.to?.low || edge.to;
+      return fromId === nodeId || toId === nodeId;
+    });
+    
+    const nodesDataset = new DataSet([
+      {
+        id: nodeId,
+        label: node.properties ? node.properties.name : node.label || `Unknown-${nodeId}`,
+        color: getNodeColor(node.labels ? node.labels[0] : node.type),
+        title: `${node.labels ? node.labels[0] : node.type}: ${node.properties ? node.properties.name : node.label || `Unknown-${nodeId}`} (已隔离)`,
+        properties: node.properties,
+        labels: node.labels
+      }
+    ]);
 
     const edgesDataset = new DataSet(
-      isolatedEdges.map(edgeId => {
-        const edge = edges.find(e => e.id === edgeId);
+      isolatedEdges.map(edge => {
+        const edgeId = edge.id || edge.identity?.low;
         return {
           id: edgeId,
-          from: edge.from,
-          to: edge.to,
-          label: edge.label,
+          from: edge.from?.low || edge.from,
+          to: edge.to?.low || edge.to,
+          label: edge.type || edge.label,
           arrows: 'to',
           color: { color: '#dc3545', highlight: '#c82333' }
         };
       })
     );
 
-    network.setData({ nodes: nodesDataset, edges: edgesDataset });
-    toast.success(`节点 ${nodeId} 已隔离`);
+    if (network) {
+      network.setData({ nodes: nodesDataset, edges: edgesDataset });
+    }
+    toast.success(`节点 ${node.properties ? node.properties.name : node.label || nodeId} 已隔离`);
   };
 
   const fetchAllNodesAndEdges = async () => {
@@ -427,10 +453,17 @@ const GraphVisualization = () => {
               color: getNodeColor(nodeType),
               title: `${nodeType}: ${nodeName}\n风险等级: ${riskLevel.toUpperCase()}\n\n属性:\n${JSON.stringify(node.properties, null, 2)}`,
               group: riskLevel,
-              level: node.properties.level || 0
+              level: node.properties.level || 0,
+              properties: node.properties,
+              labels: node.labels
             });
             
-            nodeMap.set(nodeId, node);
+            nodeMap.set(nodeId, {
+              id: nodeId,
+              identity: node.identity,
+              labels: node.labels,
+              properties: node.properties
+            });
           });
         }
 
@@ -440,7 +473,7 @@ const GraphVisualization = () => {
               id: rel.identity.low || index,
               from: rel.start.low,
               to: rel.end.low,
-              label: `${rel.type}\n${rel.properties.description || ''}`,
+              label: rel.type,
               arrows: 'to',
               color: { color: '#666666', highlight: '#333333' },
               title: `关系类型: ${rel.type}\n属性:\n${JSON.stringify(rel.properties, null, 2)}`
@@ -460,15 +493,15 @@ const GraphVisualization = () => {
       }
     } catch (error) {
       console.error('Error fetching full graph data:', error);
-      toast.error('获取完整图谱数据失败');
+      toast.error('获取完整图谱数据失败: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
   };
 
   const showNodeDetails = (node) => {
-    const nodeType = node.labels ? node.labels[0] : (node.type || 'Unknown');
-    const nodeName = node.properties ? node.properties.name : node.label;
+    const nodeType = node.labels ? node.labels[0] : 'Unknown';
+    const nodeName = node.properties ? node.properties.name : node.label || 'Unknown';
     const riskLevel = getRiskLevel(nodeType, node.properties || {});
     
     toast.info(
@@ -481,6 +514,9 @@ const GraphVisualization = () => {
         </div>
         <div className="mb-2">
           <strong>名称:</strong> {nodeName}
+        </div>
+        <div className="mb-2">
+          <strong>ID:</strong> {node.id}
         </div>
         {node.properties && (
           <div>
@@ -518,7 +554,7 @@ const GraphVisualization = () => {
 
   const executeQuery = async () => {
     if (!query.trim()) {
-      toast.error('Please enter a Cypher query');
+      toast.error('请输入 Cypher 查询语句');
       return;
     }
 
@@ -534,14 +570,28 @@ const GraphVisualization = () => {
         // Convert neo4j results to vis.js format
         const visNodes = new DataSet();
         const visEdges = new DataSet();
+        const processedNodes = [];
 
         if (graphData.nodes) {
           graphData.nodes.forEach((node, index) => {
+            const nodeId = node.identity.low;
+            const nodeType = node.labels[0] || 'Unknown';
+            const nodeName = node.properties.name || `${nodeType}-${nodeId}`;
+            
             visNodes.add({
-              id: node.identity.low || index,
-              label: node.properties.name || `${node.labels[0]}-${index}`,
-              color: getNodeColor(node.labels[0]),
-              title: `${node.labels.join(', ')}: ${node.properties.name || index}`
+              id: nodeId,
+              label: nodeName,
+              color: getNodeColor(nodeType),
+              title: `${node.labels.join(', ')}: ${nodeName}`,
+              properties: node.properties,
+              labels: node.labels
+            });
+            
+            processedNodes.push({
+              id: nodeId,
+              identity: node.identity,
+              labels: node.labels,
+              properties: node.properties
             });
           });
         }
@@ -558,12 +608,20 @@ const GraphVisualization = () => {
           });
         }
 
-        network.setData({ nodes: visNodes, edges: visEdges });
-        toast.success('Query executed successfully');
+        setNodes(processedNodes);
+        setEdges(graphData.relationships || []);
+        
+        if (network) {
+          network.setData({ nodes: visNodes, edges: visEdges });
+          network.fit();
+        }
+        
+        toast.success(`查询执行成功，返回 ${visNodes.length} 个节点和 ${visEdges.length} 条关系`);
       }
     } catch (error) {
       console.error('Error executing query:', error);
-      toast.error('Failed to execute query');
+      const errorMsg = error.response?.data?.message || error.message;
+      toast.error('查询执行失败: ' + errorMsg);
     } finally {
       setLoading(false);
     }
@@ -571,70 +629,78 @@ const GraphVisualization = () => {
 
   const filterByType = (type) => {
     const filteredNodes = nodes.filter(node => {
-      const nodeType = node.labels ? node.labels[0] : node.type;
+      const nodeType = node.labels ? node.labels[0] : (node.type || 'Unknown');
       return nodeType === type;
     });
     const nodeIds = new Set(filteredNodes.map(n => n.id));
     const filteredEdges = edges.filter(edge => 
-      nodeIds.has(edge.from) || nodeIds.has(edge.to)
+      nodeIds.has(edge.from?.low || edge.from) || nodeIds.has(edge.to?.low || edge.to)
     );
 
     const nodesDataset = new DataSet(
       filteredNodes.map(node => ({
         id: node.id,
-        label: node.properties ? node.properties.name : node.label,
+        label: node.properties ? node.properties.name : node.label || `Unknown-${node.id}`,
         color: getNodeColor(node.labels ? node.labels[0] : node.type),
-        title: `${node.labels ? node.labels[0] : node.type}: ${node.properties ? node.properties.name : node.label}`
+        title: `${node.labels ? node.labels[0] : node.type}: ${node.properties ? node.properties.name : node.label || `Unknown-${node.id}`}`,
+        properties: node.properties,
+        labels: node.labels
       }))
     );
 
     const edgesDataset = new DataSet(
       filteredEdges.map(edge => ({
-        id: edge.id,
-        from: edge.from,
-        to: edge.to,
-        label: edge.label,
+        id: edge.id || edge.identity?.low,
+        from: edge.from?.low || edge.from,
+        to: edge.to?.low || edge.to,
+        label: edge.type || edge.label,
         arrows: 'to'
       }))
     );
 
-    network.setData({ nodes: nodesDataset, edges: edgesDataset });
+    if (network) {
+      network.setData({ nodes: nodesDataset, edges: edgesDataset });
+    }
   };
 
   const filterByRiskLevel = (riskLevel) => {
     const filteredNodes = nodes.filter(node => {
-      const nodeType = node.labels ? node.labels[0] : node.type;
+      const nodeType = node.labels ? node.labels[0] : (node.type || 'Unknown');
       const nodeProperties = node.properties || {};
       return getRiskLevel(nodeType, nodeProperties) === riskLevel;
     });
     const nodeIds = new Set(filteredNodes.map(n => n.id));
     const filteredEdges = edges.filter(edge => 
-      nodeIds.has(edge.from) || nodeIds.has(edge.to)
+      nodeIds.has(edge.from?.low || edge.from) || nodeIds.has(edge.to?.low || edge.to)
     );
 
     const nodesDataset = new DataSet(
       filteredNodes.map(node => {
-        const nodeType = node.labels ? node.labels[0] : node.type;
+        const nodeType = node.labels ? node.labels[0] : (node.type || 'Unknown');
         return {
           id: node.id,
-          label: node.properties ? node.properties.name : node.label,
+          label: node.properties ? node.properties.name : node.label || `Unknown-${node.id}`,
           color: getNodeColor(nodeType),
-          title: `${nodeType}: ${node.properties ? node.properties.name : node.label}`
+          title: `${nodeType}: ${node.properties ? node.properties.name : node.label || `Unknown-${node.id}`}`,
+          properties: node.properties,
+          labels: node.labels
         };
       })
     );
 
     const edgesDataset = new DataSet(
       filteredEdges.map(edge => ({
-        id: edge.id,
-        from: edge.from,
-        to: edge.to,
-        label: edge.label,
+        id: edge.id || edge.identity?.low,
+        from: edge.from?.low || edge.from,
+        to: edge.to?.low || edge.to,
+        label: edge.type || edge.label,
         arrows: 'to'
       }))
     );
 
-    network.setData({ nodes: nodesDataset, edges: edgesDataset });
+    if (network) {
+      network.setData({ nodes: nodesDataset, edges: edgesDataset });
+    }
   };
 
   const resetView = () => {
@@ -816,8 +882,8 @@ const GraphVisualization = () => {
               <div className="card-body">
                 <div className="row">
                   <div className="col-md-6">
-                    <strong>类型:</strong> {selectedNode.labels ? selectedNode.labels[0] : selectedNode.type}<br/>
-                    <strong>名称:</strong> {selectedNode.properties ? selectedNode.properties.name : selectedNode.label}<br/>
+                    <strong>类型:</strong> {selectedNode.labels ? selectedNode.labels[0] : (selectedNode.type || 'Unknown')}<br/>
+                    <strong>名称:</strong> {selectedNode.properties ? selectedNode.properties.name : selectedNode.label || 'Unknown'}<br/>
                     <strong>ID:</strong> {selectedNode.id}
                   </div>
                   <div className="col-md-6">
